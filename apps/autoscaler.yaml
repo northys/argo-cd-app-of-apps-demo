@@ -1,0 +1,69 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: autoscaler
+  namespace: argo
+spec:
+  # The project the application belongs to.
+  project: common
+
+  # Sync policy
+  syncPolicy:
+    automated: # automated sync by default retries failed attempts 5 times with following delays between attempts ( 5s, 10s, 20s, 40s, 80s ); retry controlled using `retry` field.
+      prune: true # Specifies if resources should be pruned during auto-syncing ( false by default ).
+      selfHeal: true # Specifies if partial app sync should be executed when resources are changed only in target Kubernetes cluster and no git change detected ( false by default ).
+      allowEmpty: false # Allows deleting all application resources during automatic syncing ( false by default ).
+    syncOptions:
+      - CreateNamespace=true
+      - Replace=true
+      - ServerSideApply=true
+
+  # Source of the application manifests
+  source:
+    repoURL: https://kubernetes.github.io/autoscaler  # Can point to either a Helm chart repo or a git repo.
+    targetRevision: "*"  # For Helm, this refers to the chart version.
+
+    # helm specific config
+    chart: cluster-autoscaler  # Set this when pulling directly from a Helm repo. DO NOT set for git-hosted Helm charts.
+    helm:
+      # Values file as block file. This takes precedence over values
+      valuesObject:
+        rbac:
+          serviceAccount:
+            create: false
+            name: aws-cluster-autoscaler
+        cloudProvider: aws
+        awsRegion: eu-west-1
+        autoDiscovery:
+          clusterName: euw1-stage-cluster
+        replicaCount: 2
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        serviceMonitor:
+          enabled: false
+          selector:
+            release: prod
+        extraArgs:
+          skip-nodes-with-local-storage: false
+          scale-down-utilization-threshold: 0.75
+
+
+      # Skip custom resource definition installation if chart contains custom resource definitions. Defaults to false
+      skipCrds: false
+
+      # Optional Helm version to template with. If omitted it will fall back to look at the 'apiVersion' in Chart.yaml
+      # and decide which Helm binary to use automatically. This field can be either 'v2' or 'v3'.
+      version: v3
+
+  # Destination cluster and namespace to deploy the application
+  destination:
+    namespace: kube-system
+    server: https://kubernetes.default.svc
+
+  # RevisionHistoryLimit limits the number of items kept in the application's revision history, which is used for
+  # informational purposes as well as for rollbacks to previous versions. This should only be changed in exceptional
+  # circumstances. Setting to zero will store no history. This will reduce storage used. Increasing will increase the
+  # space used to store the history, so we do not recommend increasing it.
+  revisionHistoryLimit: 10

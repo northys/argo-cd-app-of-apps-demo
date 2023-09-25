@@ -1,0 +1,79 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: keda
+  namespace: argo
+spec:
+  # The project the application belongs to.
+  project: common
+
+  # Sync policy
+  syncPolicy:
+    automated: # automated sync by default retries failed attempts 5 times with following delays between attempts ( 5s, 10s, 20s, 40s, 80s ); retry controlled using `retry` field.
+      prune: true # Specifies if resources should be pruned during auto-syncing ( false by default ).
+      selfHeal: true # Specifies if partial app sync should be executed when resources are changed only in target Kubernetes cluster and no git change detected ( false by default ).
+      allowEmpty: false # Allows deleting all application resources during automatic syncing ( false by default ).
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+
+  # Source of the application manifests
+  source:
+    repoURL: https://kedacore.github.io/charts  # Can point to either a Helm chart repo or a git repo.
+    targetRevision: "*"  # For Helm, this refers to the chart version.
+
+    # helm specific config
+    chart: keda  # Set this when pulling directly from a Helm repo. DO NOT set for git-hosted Helm charts.
+    helm:
+      # Values file as block file. This takes precedence over values
+      valuesObject:
+        prometheus:
+          metricServer:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+          operator:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+            prometheusRules:
+              enabled: true
+              namespace: monitoring
+              alerts:
+                - alert: KedaComponentDown
+                  annotations:
+                    summary: Some Keda components are down
+                  expr: count by (namespace) (up{namespace="keda"}) != 3
+                  for: 0m
+                  labels:
+                    severity: critical
+
+                - alert: KedaScalerErrors
+                  annotations:
+                    summary: Keda scaledObject {{ $labels.scaledObject }} is experiencing errors with {{ $labels.scaler }} scaler
+                  expr: sum by (scaledObject , scaler) (changes(keda_scaler_errors[1h])) > 0
+                  for: 0m
+                  labels:
+                    severity: warning
+          webhooks:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+
+      # Skip custom resource definition installation if chart contains custom resource definitions. Defaults to false
+      skipCrds: false
+
+      # Optional Helm version to template with. If omitted it will fall back to look at the 'apiVersion' in Chart.yaml
+      # and decide which Helm binary to use automatically. This field can be either 'v2' or 'v3'.
+      version: v3
+
+  # Destination cluster and namespace to deploy the application
+  destination:
+    namespace: keda
+    server: https://kubernetes.default.svc
+
+  # RevisionHistoryLimit limits the number of items kept in the application's revision history, which is used for
+  # informational purposes as well as for rollbacks to previous versions. This should only be changed in exceptional
+  # circumstances. Setting to zero will store no history. This will reduce storage used. Increasing will increase the
+  # space used to store the history, so we do not recommend increasing it.
+  revisionHistoryLimit: 10
