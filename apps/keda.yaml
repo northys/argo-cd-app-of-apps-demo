@@ -35,9 +35,9 @@ spec:
           operator:
             enabled: true
             serviceMonitor:
-              enabled: true
+              enabled: false
             prometheusRules:
-              enabled: true
+              enabled: false
               namespace: monitoring
               alerts:
                 - alert: KedaComponentDown
