@@ -5,7 +5,7 @@ metadata:
 spec:
   destination:
     name: in-cluster
-    namespace: argocd
+    namespace: argo
   source:
     path: apps
     repoURL: 'https://github.com/northys/argo-cd-app-of-apps-demo'
